@@ -26,6 +26,8 @@ you really want them to do.
 """
 
 import random
+import time
+import math
 
 from deap import tools
 import  numpy
@@ -535,21 +537,24 @@ def varSem(population, toolbox, tarSem, library):
     """
     offspring = [toolbox.clone(ind) for ind in population]
     #use ADS to select a list of pairs
-    angle_list = toolbox.ADS(pop=offspring, tarSem=tarSem, np=len(offspring), nt=10, ta=90)
+    angle_list = toolbox.ADS(pop=offspring, tarSem=tarSem, np=len(offspring), nt=10, ta=math.pi/2)
 
     # Apply crossover and mutation on the selected pairs, get the desired semantics
-    for i in range(len(angle_list)):
-        if random.random()<0.5:
-            dsr_sem = toolbox.PC(parents=angle_list[i], tarSem=tarSem)
+    for i in range(len(offspring)):
+        if i < len(angle_list):
+            if random.random()<0.5:
+                dsr_sem = toolbox.PC(parents=angle_list[i], tarSem=tarSem)
+            else:
+                dsr_sem = toolbox.RSM(parent=angle_list[i][0], tarSem=tarSem)
         else:
-            dsr_sem = toolbox.RSM(parent=angle_list[i][0], tarSem=tarSem)
+            dsr_sem = toolbox.RSM(parent=offspring[i], tarSem=tarSem)
 
         offspring[i], = toolbox.SCR(offspring[i], tarSem=dsr_sem, library=library)
         del offspring[i].fitness.values
 
     return offspring
 
-def semanticGP(population, toolbox, ngen, tarSem, library, stats=None,
+def semanticGP(population, toolbox, ngen, tarSem, library, output_file, stats=None,
              halloffame=None, verbose=__debug__):
     """This algorithm reproduce the semantic GP
 
@@ -611,20 +616,24 @@ def semanticGP(population, toolbox, ngen, tarSem, library, stats=None,
     logbook = tools.Logbook()
     logbook.header = ['gen', 'nevals'] + (stats.fields if stats else [])
 
+    library.lib_maintain(population)
+    evas = 0
     # Evaluate the individuals with an invalid fitness
     invalid_ind = [ind for ind in population if not ind.fitness.valid]
     #fitnesses = toolbox.map(toolbox.evaluate, invalid_ind)
     #(fitnesses, seman_vecs) = toolbox.map(toolbox.evaluate, invalid_ind)
     fit_sv = toolbox.map(toolbox.evaluate, invalid_ind)
     for ind, f_s in zip(invalid_ind, fit_sv):  #fitnesses, seman_vecs
-    #for ind, fit in zip(invalid_ind, fitnesses):
-        #ind.fitness.values=fit
         ind.fitness.values=f_s[0]
         ind.sem_vec = f_s[0][1]
+        evas = evas + len(ind)
 
 
     if halloffame is not None:
         halloffame.update(population)
+
+    #print("%d\t%f" % (evas, halloffame.items[0].fitness.values[0]), file=output_file)
+    output_file.procedureRecord(evas, halloffame.items[0].fitness.values[0])
 
     record = stats.compile(population) if stats else {}
     logbook.record(gen=0, nevals=len(invalid_ind), **record)
@@ -633,6 +642,7 @@ def semanticGP(population, toolbox, ngen, tarSem, library, stats=None,
 
     # Begin the generational process
     for gen in range(1, ngen + 1):
+
         # Select the next generation individuals
         offspring = toolbox.select(population, len(population))
 
@@ -648,18 +658,34 @@ def semanticGP(population, toolbox, ngen, tarSem, library, stats=None,
         for ind, f_s in zip(invalid_ind, fit_sv):
             ind.fitness.values = f_s[0]
             ind.sem_vec = numpy.array(list(f_s[0][1]))
-
-        # Update the hall of fame with the generated individuals
-        if halloffame is not None:
-            halloffame.update(offspring)
+            evas = evas + len(ind)
 
         # Replace the current population by the offspring
-        population[:] = offspring
+        #population[:] = offspring
+        for i in range(len(population)):
+            if population[i].fitness.values >= offspring[i].fitness.values and offspring[i] not in population:
+                population[i] = offspring[i]
+        #population[0] = toolbox.selectBest(population+offspring, 1)[0]
+        #population[1:] = toolbox.select(population[1:] + offspring, len(population) - 1)
+
+        # maintain the library
+        library.lib_maintain(population)
+
+        # Update the hall of fame with the new population
+        if halloffame is not None:
+            halloffame.update(population)
+
+        # print("%d\t%d\t%f" % (gen, evas, halloffame.items[0].fitness.values[0]), file=output_file)
+        output_file.procedureRecord(evas, halloffame.items[0].fitness.values[0])
+        print("%d\t%d\t%f" % (gen, evas, halloffame.items[0].fitness.values[0]))
 
         # Append the current generation statistics to the logbook
         record = stats.compile(population) if stats else {}
         logbook.record(gen=gen, nevals=len(invalid_ind), **record)
-        if verbose:
-            print (logbook.stream)
+        #if verbose:
+         #   print (logbook.stream)
 
-    return population, logbook
+        if halloffame.items[0].fitness.values[0] < 0.0001 or evas > 1e7:
+            break
+
+    return population, logbook, evas
