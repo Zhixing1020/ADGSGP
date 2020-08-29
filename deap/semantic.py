@@ -18,12 +18,17 @@ def angle_dis(vec1, vec2):
     if len(vec1) != len(vec2):
         print("the dimension of two vectors must be consistent in angle_dis function")
         return 0
+    if (vec1 == 0).all():
+        vec1 = vec1 + 1e-4
+    if (vec2 == 0).all():
+        vec2 = vec2 + 1e-4
     vec1_sig = vec1.sum()  # math.fsum(vec1)
     vec2_sig = vec2.sum()  # math.fsum(vec2)
     vec_sum = (vec1*vec2).sum()
     norm_vec1 = math.sqrt((vec1*vec1).sum())  # math.fsum((vi**2 for vi in vec1))
     norm_vec2 = math.sqrt((vec2*vec2).sum())  # math.fsum((vi ** 2 for vi in vec2))
     res = vec_sum/(norm_vec1*norm_vec2)
+    #res = (vec1_sig*vec2_sig) / (norm_vec1 * norm_vec2)
     if res>1:
         res=1
     elif res<-1:
@@ -117,7 +122,7 @@ def Invert(con, k, tarSem, subSem0=numpy.zeros(1), subSem1=numpy.zeros(1)):
         if k==0:
             for i in range(len(tarSem)):
                 if subSem1[i]!=0:
-                    dsr_sem[i] = tarSem[i]/subSem1[i]
+                    dsr_sem[i] = tarSem[i] / subSem1[i]
                 if subSem1[i]==0 and tarSem[i]==0:
                     dsr_sem[i] = tarSem[i]
                 if subSem1[i]==0 and tarSem[i]!=0:
@@ -125,7 +130,7 @@ def Invert(con, k, tarSem, subSem0=numpy.zeros(1), subSem1=numpy.zeros(1)):
         else:
             for i in range(len(tarSem)):
                 if subSem0[i]!=0:
-                    dsr_sem[i] = tarSem[i]/subSem0[i]
+                    dsr_sem[i] = tarSem[i] / subSem0[i]
                 if subSem0[i]==0 and tarSem[i]==0:
                     dsr_sem[i] = tarSem[i]
                 if subSem0[i]==0 and tarSem[i]!=0:
@@ -147,6 +152,29 @@ def Invert(con, k, tarSem, subSem0=numpy.zeros(1), subSem1=numpy.zeros(1)):
                     dsr_sem[i] = tarSem[i]
                 elif subSem0[i]==0 and tarSem[i]!=0:
                     dsr_sem[i] = 0
+    if con.name == "sin":
+        for i in range(len(tarSem)):
+            if tarSem[i] > 1 or tarSem[i] < -1:
+                dsr_sem[i] = tarSem[i]
+            else:
+                dsr_sem[i] = math.asin(tarSem[i])
+    if con.name == "cos":
+        for i in range(len(tarSem)):
+            if tarSem[i] > 1 or tarSem[i] < -1:
+                dsr_sem[i] = tarSem[i]
+            else:
+                dsr_sem[i] = math.acos(tarSem[i])
+    if con.name == "exp":
+        for i in range(len(tarSem)):
+            if tarSem[i] <= 0:
+                dsr_sem[i] = tarSem[i]
+            else:
+                dsr_sem[i] = math.log(tarSem[i])
+    if con.name == "ln":
+        for i in range(len(tarSem)):
+            if tarSem[i] > 10:
+                tarSem[i] = 10
+            dsr_sem[i] = math.exp(tarSem[i])
 
     return dsr_sem
 
@@ -223,7 +251,7 @@ class subTree(object):
         # Evaluate the mean squared error between the expression
         # and the real function : x**4 + x**3 + x**2 + x
         # sqerrors = ((func(x) - x**4 - x**3 - x**2 - x)**2 for x in points)
-        sqerrors = numpy.array(list(func(x[0], x[1]) for x in points))
+        sqerrors = numpy.array(list(func(x[0]) for x in points))
         self.sem_vec=sqerrors
         #print(self.sem_vec)
 
@@ -260,6 +288,8 @@ def angleDrivenSel(toolbox, pop, tarSem, np, nt, ta):
         if flag==False:
             p2=cp2_use
 
+        if (abs(p2.sem_vec - p1.sem_vec) < 1e-4).all():
+            continue
         output_list.append((p1,p2))
 
     return output_list
@@ -275,14 +305,14 @@ def perpendicularCX(parents, tarSem):
     beta = angle_dis(relSV2, relatSV2)
 
     relaNorm = math.sqrt((relatSV1**2).sum())
-    if alpha <= 90 and beta < 90:
+    if alpha <= math.pi / 2 and beta < math.pi / 2:
         roNorm = math.sqrt(((p1.sem_vec - tarSem)**2).sum())*math.cos(alpha)
         ov = p1.sem_vec + (roNorm /relaNorm) * relatSV2
-    elif alpha > 90:
-        roNorm = math.sqrt(((p1.sem_vec - tarSem) ** 2).sum()) * math.cos(180-alpha)
+    elif alpha > math.pi / 2:
+        roNorm = math.sqrt(((p1.sem_vec - tarSem) ** 2).sum()) * math.cos(math.pi-alpha)
         ov = p1.sem_vec - (roNorm / relaNorm) * relatSV2
-    elif beta >= 90:
-        roNorm =  math.sqrt(((p2.sem_vec - tarSem) ** 2).sum()) * math.cos(180-beta)
+    elif beta >= math.pi / 2:
+        roNorm =  math.sqrt(((p2.sem_vec - tarSem) ** 2).sum()) * math.cos(math.pi-beta)
         ov = p2.sem_vec + (roNorm /relaNorm) * relatSV2
     else:
         ov = randSegMut(p1, tarSem)
@@ -324,35 +354,42 @@ def semConRep(par, tarSem, toolbox, pset, points, library):
     #based on the children_arr, construct the other subtree and get its semantic
     dsr_sem=tarSem
     if len(path)>1:
-        for j in path[1:len(path)-1]:
-            #R in left sub tree
-            if j == children_arr[parent_arr[j]][0]:
-                #calculate the semantic of right sub tree
-                fix_st=children_arr[parent_arr[j]][1]
-                sub_tree=subTree(toolbox,creator.Individual(par[par.searchSubtree(fix_st)]),points)
-                dsr_sem = Invert(par[j], 0, dsr_sem, subSem1=sub_tree.sem_vec)
-            else: #R in right sub tree
-                #calculate the semantic of left sub tree
-                fix_st=children_arr[parent_arr[j]][0]
-                sub_tree = subTree(toolbox, creator.Individual(par[par.searchSubtree(fix_st)]), points)
-                dsr_sem = Invert(par[j], 1, dsr_sem, subSem0=sub_tree.sem_vec)
+        for j in path[1:len(path)]:
+            if len(children_arr[parent_arr[j]]) == 1:
+                dsr_sem = Invert(par[parent_arr[j]], 0, dsr_sem)
+            else:
+                #R in left sub tree
+                if j == children_arr[parent_arr[j]][0]:
+                    #calculate the semantic of right sub tree
+                    fix_st=children_arr[parent_arr[j]][1]
+                    sub_tree=subTree(toolbox,creator.Individual(par[par.searchSubtree(fix_st)]),points)
+                    dsr_sem = Invert(par[parent_arr[j]], 0, dsr_sem, subSem1=sub_tree.sem_vec)
+                else: #R in right sub tree
+                    #calculate the semantic of left sub tree
+                    fix_st=children_arr[parent_arr[j]][0]
+                    sub_tree = subTree(toolbox, creator.Individual(par[par.searchSubtree(fix_st)]), points)
+                    dsr_sem = Invert(par[parent_arr[j]], 1, dsr_sem, subSem0=sub_tree.sem_vec)
 
     #randomly select a child serving as T, if node R is a primitive.
     #determine the sub-semantic
     if node.arity>0:
-        prefix = random.randint(0, node.arity - 1)
-        #Snode = children_arr[parent_arr[path[-1]]][prefix]
-        Snode = children_arr[spt][prefix]
-        if prefix == 1:   #left subtree is T
-            #fix_st = children_arr[parent_arr[path[-1]]][1]
-            fix_st = children_arr[spt][1]
-            sub_tree = subTree(toolbox, creator.Individual(par[par.searchSubtree(fix_st)]), points)
-            dsr_sem = Invert(node, 0, dsr_sem, subSem1=sub_tree.sem_vec)
-        else:
-            #fix_st = children_arr[parent_arr[path[-1]]][0]
-            fix_st = children_arr[spt][0]
-            sub_tree = subTree(toolbox, creator.Individual(par[par.searchSubtree(fix_st)]), points)
-            dsr_sem = Invert(node, 1, dsr_sem, subSem0=sub_tree.sem_vec)
+        if node.arity == 1: # unary function
+            Snode = children_arr[spt][0]
+            dsr_sem = Invert(node, 0, dsr_sem)
+        else: # binary function
+            prefix = random.randint(0, node.arity - 1)
+            #Snode = children_arr[parent_arr[path[-1]]][prefix]
+            Snode = children_arr[spt][abs(1-prefix)]
+            if prefix == 1:   #left subtree is T
+                #fix_st = children_arr[parent_arr[path[-1]]][1]
+                fix_st = children_arr[spt][1]
+                sub_tree = subTree(toolbox, creator.Individual(par[par.searchSubtree(fix_st)]), points)
+                dsr_sem = Invert(node, 0, dsr_sem, subSem1=sub_tree.sem_vec)
+            else:
+                #fix_st = children_arr[parent_arr[path[-1]]][0]
+                fix_st = children_arr[spt][0]
+                sub_tree = subTree(toolbox, creator.Individual(par[par.searchSubtree(fix_st)]), points)
+                dsr_sem = Invert(node, 1, dsr_sem, subSem0=sub_tree.sem_vec)
     else:
         return par   #cause the node R (a termnal / ephemeral) has been modified by a random operation at the beginning
 
@@ -366,13 +403,14 @@ def semConRep(par, tarSem, toolbox, pset, points, library):
         if st.angle_dis < min_angle:
             min_angle = st.angle_dis
             min_st = st.expr
-            #obtain the coefficient b
-            if ((st.sem_vec - st.sem_vec.sum()/st.sem_vec.size)**2).sum() != 0:
-                b = ((dsr_sem - dsr_sem.sum()/dsr_sem.size)*(st.sem_vec - st.sem_vec.sum()/st.sem_vec.size)).sum()/((st.sem_vec - st.sem_vec.sum()/st.sem_vec.size)**2).sum()
-            else:
-                b = ((dsr_sem - dsr_sem.sum() / dsr_sem.size) * (st.sem_vec - st.sem_vec.sum() / st.sem_vec.size)).sum()
-            #obtain the coefficient a
-            a = dsr_sem.sum()/dsr_sem.size - b * st.sem_vec.sum()/st.sem_vec.size
+
+    #obtain the coefficient b
+    if ((min_st.sem_vec - min_st.sem_vec.sum()/min_st.sem_vec.size)**2).sum() != 0:
+        b = ((dsr_sem - dsr_sem.sum()/dsr_sem.size)*(min_st.sem_vec - min_st.sem_vec.sum()/min_st.sem_vec.size)).sum()/((min_st.sem_vec - min_st.sem_vec.sum()/min_st.sem_vec.size)**2).sum()
+    else:
+        b = ((dsr_sem - dsr_sem.sum() / dsr_sem.size) * (min_st.sem_vec - min_st.sem_vec.sum() / min_st.sem_vec.size)).sum()
+    #obtain the coefficient a
+    a = dsr_sem.sum()/dsr_sem.size - b * min_st.sem_vec.sum()/min_st.sem_vec.size
 
     #====crossover into the subtree====
     #use a, b construct the new sub tree
