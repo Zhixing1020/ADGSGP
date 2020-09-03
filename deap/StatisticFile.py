@@ -122,7 +122,7 @@ class StatisticFile(object):
 
     def problemOverallRecord(self, run):
         doc = open(self.overallAdd,'a')
-        print("%d\tsuc:\t%f" % (run, self.suc.sum() / self.suc.size()), end='', file=doc)
+        print("%d\tsuc:\t%f" % (run, self.suc.sum() / self.suc.size), end='', file=doc)
         print("\teva_times:\t%f" % self.eva_times.sum() / self.eva_times.size, end='', file=doc)
         print("\ttrain_error:\t%f" % self.train_error.sum() / self.train_error.size, end='', file=doc)
         print("\ttest_error:\t%f" % self.test_error.sum() / self.test_error.size, end='', file=doc)
