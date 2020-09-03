@@ -5,7 +5,7 @@ Before running the project, you should install DEAP, and convert the Python 2.x 
 
 
 The list of newly changed components in DEAP:
-deap/algorithms.py
-deap/semantic.py
-deap/StatisticFile.py
-SBP/GP_SBP.py
+deap/algorithms.py;
+deap/semantic.py;
+deap/StatisticFile.py;
+SBP/GP_SBP.py;
